@@ -12,12 +12,24 @@ export default function BankConnect({ onConnect, buttonText = "Connect Bank" }) 
       const token = await getToken();
       const response = await fetch('/api/plaid/create_link_token', {
         method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json' 
+        },
+        body: JSON.stringify({}) // Explicitly send an empty body
       });
+      
+      // Catch Nginx HTML proxy errors before they crash the JSON parser
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`[Link Token Error] Status: ${response.status} -`, errorText);
+        return;
+      }
+
       const data = await response.json();
       setLinkToken(data.link_token);
     } catch (error) {
-      console.error('Error fetching link token:', error);
+      console.error('Network or parsing error fetching link token:', error);
     }
   }, [getToken]);
 

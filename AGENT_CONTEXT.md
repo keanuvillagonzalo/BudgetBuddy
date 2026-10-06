@@ -1,146 +1,197 @@
-# Budget App Codebase Context
+# BudgetBuddy Repo Context
 
-## Purpose
+## Project Summary
 
-BudgetBuddy is a Vite + React budget dashboard with Clerk authentication and Plaid bank connections. The current implementation connects a bank for the active server session, fetches Plaid transactions, and visualizes spending by month and category. It does not yet persist budget data or bank connections.
+This repository is a full-stack budget dashboard built with React + Vite on the frontend and Express on the backend. The app authenticates users with Clerk, connects their bank accounts through Plaid, syncs transactions, and renders monthly and category-based budget insights in the UI.
+
+The app is not a generic starter app. It is a working prototype focused on a single authenticated user flow: sign in, connect a bank, sync transactions, filter by account and month, and visualize spending.
+
+## Current Stack
+
+### Frontend
+- React 19
+- Vite 8
+- React Router 7
+- Clerk React SDK
+- Plaid Link React integration
+- Recharts for charts
+- Oxlint for linting
+
+### Backend
+- Express 5
+- @clerk/express
+- Plaid Node SDK
+- express-validator
+- helmet and cors
+
+### Containerization
+- Docker Compose
+- Separate frontend and backend services
+- Frontend exposed on port 8080
+- Backend exposed on port 3000
 
 ## Repository Layout
 
 ```text
 Budget/
-|- docker-compose.yml          # Runs the frontend and backend containers
-|- AGENT_CONTEXT.md
-|- frontend/
-|  |- Dockerfile               # Builds Vite output and serves it with Nginx
-|  |- package.json             # React, Clerk, Plaid Link, Recharts, Vite, Oxlint
-|  |- vite.config.js
-|  |- index.html
-|  |- components/
-|  |  |- BankConnect.jsx       # Creates a Plaid Link flow and exchanges its token
-|  |  |- MonthlyBarChart.jsx    # Monthly transaction visualization
-|  |  `- SpendingPieChart.jsx   # Category spending visualization
-|  |- pages/
-|  |  `- Dashboard.jsx         # User greeting, connection state, filters, and charts
-|  `- src/
-|     |- App.jsx               # Router, header, Clerk sign-in, and dashboard route
-|     |- App.css               # Application styles
-|     |- index.css             # Global styles and CSS variables
-|     |- main.jsx              # React bootstrap and ClerkProvider
-|     `- assets/
-`- backend/
-   |- Dockerfile
-   |- package.json
-   `- index.js                 # Express, Clerk middleware, and Plaid API routes
+├── AGENT_CONTEXT.md
+├── README.md
+├── docker-compose.yml
+├── backend/
+│   ├── Dockerfile
+│   ├── index.js
+│   ├── package.json
+│   └── tests/
+│       └── index.test.js
+├── frontend/
+│   ├── Dockerfile
+│   ├── index.html
+│   ├── package.json
+│   ├── vite.config.js
+│   ├── components/
+│   │   ├── BankConnect.jsx
+│   │   ├── MonthlyBarChart.jsx
+│   │   ├── SpendingPieChart.jsx
+│   │   └── TransactionTable.jsx
+│   ├── pages/
+│   │   └── Dashboard.jsx
+│   ├── public/
+│   └── src/
+│       ├── App.css
+│       ├── App.jsx
+│       ├── index.css
+│       ├── main.jsx
+│       └── assets/
+└── .env.example (if present in the repo root; check before use)
 ```
 
-## Current Architecture
+## Important Runtime Behavior
 
-### Frontend
+### Frontend boot flow
+- `frontend/src/main.jsx` loads the Clerk publishable key from `import.meta.env.VITE_CLERK_PUBLISHABLE_KEY`.
+- It fails fast if the key is missing.
+- `ClerkProvider` wraps the entire app.
+- `frontend/src/App.jsx` renders the app with `BrowserRouter` and only exposes the dashboard to signed-in users.
 
-- Framework: React 19 with Vite.
-- Entry point: `frontend/src/main.jsx`.
-- `main.jsx` reads `import.meta.env.VITE_CLERK_PUBLISHABLE_KEY`, throws if it is missing, and wraps the app in Clerk's `ClerkProvider`.
-- `frontend/src/App.jsx` uses React Router. The `/` route renders `Dashboard` only inside Clerk's `SignedIn` component. Signed-out users see the header's modal sign-in button; signed-in users see `UserButton`.
-- `frontend/pages/Dashboard.jsx` gets the Clerk user and session token, loads transactions after a bank connection, selects the newest available month, and renders the monthly bar and category pie charts.
-- `frontend/components/BankConnect.jsx` requests a Plaid Link token, opens Plaid Link, exchanges the returned public token, and asks the dashboard to reload transactions.
-- API calls use relative `/api/...` paths and send `Authorization: Bearer <Clerk session token>`.
-- `frontend/vite.config.js` has no development API proxy. Relative API calls work through the Nginx proxy in the production Docker image, but local Vite development needs a proxy configuration or a separately handled API origin.
+### Dashboard flow
+- `frontend/pages/Dashboard.jsx` calls `getToken()` from Clerk for each authenticated request.
+- It fetches `/api/plaid/transactions` and uses the response to populate the transaction list and account list.
+- It filters transactions by selected account and month before passing them to the charts.
+- `BankConnect` is used to open the Plaid Link flow and exchange the public token.
 
-### Backend
+### Bank connection flow
+- `frontend/components/BankConnect.jsx` calls `/api/plaid/create_link_token` to get a Plaid Link token.
+- After a successful Plaid Link session, it POSTs the returned `public_token` to `/api/plaid/exchange_public_token`.
+- The dashboard then refreshes the transaction list.
 
-- Framework: Express 5 with `@clerk/express` and Plaid's Node client.
-- Entry point: `backend/index.js`.
-- The server listens on port `3000` and installs `express.json()` and `clerkMiddleware()` globally.
-- Each Plaid route calls `getAuth(req)` and returns `401` when no Clerk `userId` is present.
-- `POST /api/plaid/create_link_token` creates a Plaid Link token for the authenticated Clerk user.
-- `POST /api/plaid/exchange_public_token` exchanges Plaid's public token and stores the resulting access token in `req.app.locals.accessToken`.
-- `GET /api/plaid/transactions` calls Plaid `transactionsSync` with that in-memory access token and returns the `added` transactions.
-- There is no database, durable user-to-bank mapping, request validation, CORS configuration, centralized error handler, or automated test suite.
+### Backend auth + Plaid flow
+- `backend/index.js` applies `helmet()`, `cors()`, `express.json()`, and `clerkMiddleware()` globally.
+- The server expects a valid Clerk session for protected routes and uses `getAuth(req)`.
+- Plaid access tokens are stored in Clerk `user.privateMetadata.plaidAccessTokens` instead of a database.
+- The app also has a fallback check for `privateMetadata.plaidAccessToken` for backward compatibility.
+- `GET /api/plaid/transactions` loads all access tokens for the signed-in user, loops through each one with `transactionsSync`, aggregates the results, and returns transactions + accounts.
+- `POST /api/plaid/exchange_public_token` exchanges the Plaid public token and persists the resulting access token in Clerk metadata.
+- `POST /api/plaid/debug/clear_all` removes all saved bank connections and calls Plaid `itemRemove` for each token.
+- `POST /api/plaid/create_update_token` creates a Plaid Link token for a specific broken token index and is intended for reauthentication flow.
 
-## Authentication and Plaid Configuration
+## Current Integration Notes and Known Mismatches
 
-Required variables:
+These are important for any agent working in the repo:
 
-| Variable | Used by | Purpose | Timing |
-|---|---|---|---|
-| `VITE_CLERK_PUBLISHABLE_KEY` | Frontend and Compose | Clerk publishable key exposed to the browser | Frontend build time |
-| `CLERK_SECRET_KEY` | Backend | Clerk server-side token verification | Backend runtime |
-| `PLAID_CLIENT_ID` | Backend | Plaid client identifier | Backend runtime |
-| `PLAID_SECRET` | Backend | Plaid secret | Backend runtime |
-| `PLAID_ENV` | Backend | Plaid environment; Compose sets `sandbox` | Backend runtime |
+1. The frontend calls `/api/plaid/create_link_token`, but the backend currently exposes `/api/plaid/create_update_token`.
+   - This is a likely route mismatch and should be standardized before further work.
+   - The route name and behavior should be consistent between client and server.
 
-Do not commit real secrets or copy secret values into documentation. The Clerk publishable key is intentionally exposed in the browser build; Clerk and Plaid secret keys must remain private.
+2. The app stores bank tokens in Clerk metadata rather than a database, so it is user-scoped but not persisted in a custom app datastore.
+
+3. The backend does not maintain a separate budget database or user-specific budget records.
+
+4. There is no robust transaction pagination strategy beyond iterating through Plaid sync pages for each access token.
+
+5. The Docker setup currently uses the frontend build with `VITE_CLERK_PUBLISHABLE_KEY` and exposes the app on `localhost:8080`.
+
+## Environment Variables
+
+The app depends on the following environment values:
+
+- `VITE_CLERK_PUBLISHABLE_KEY` — required by the frontend and passed into the Docker build
+- `CLERK_SECRET_KEY` — required by the backend for Clerk session verification
+- `PLAID_CLIENT_ID` — required by the backend
+- `PLAID_SECRET` — required by the backend
+- `PLAID_ENV` — required by the backend (commonly `sandbox` locally)
+- `FRONTEND_URL` — optional override for backend CORS, defaults to `http://localhost:8080`
+
+Do not commit real secrets. Keep keys in a local `.env` file or shell environment only.
 
 ## Local Development
 
-Install dependencies separately:
-
+### Frontend
 ```powershell
 cd frontend
 npm install
 npm run dev
 ```
 
+The Vite dev server usually runs at `http://localhost:5173`.
+
+### Backend
 ```powershell
 cd backend
 npm install
 npm start
 ```
 
-The Vite development server normally runs on port `5173`; the API runs on `http://localhost:3000`. Because Vite has no `/api` proxy configured, authenticated dashboard API calls from the Vite server will need a local proxy configuration or an equivalent development setup.
+The API runs at `http://localhost:3000`.
 
-Frontend scripts:
-
-- `npm run dev` starts Vite.
-- `npm run build` creates a production build in `frontend/dist`.
-- `npm run lint` runs Oxlint.
-- `npm run preview` serves the built frontend locally.
-
-Backend scripts:
-
-- `npm start` starts `node index.js`.
-- `npm test` is a placeholder; no backend tests are configured.
-
-## Docker Deployment
-
-From the repository root:
-
+### Docker Compose
 ```powershell
 docker compose up -d --build
-docker compose ps
 ```
 
-- Frontend is exposed at `http://localhost:8080` and served by Nginx.
-- Backend is exposed at `http://localhost:3000`.
-- Compose reads the required variables from the shell environment or a root `.env` file.
-- `VITE_CLERK_PUBLISHABLE_KEY` is passed as a frontend build argument, so changing it requires rebuilding the frontend image.
-- The Nginx configuration generated in `frontend/Dockerfile` serves the SPA and proxies `/api/` to `http://backend:3000/api/`.
-- The proxy target depends on the Compose service name `backend`.
+Then access:
+- Frontend: `http://localhost:8080`
+- Backend: `http://localhost:3000`
 
-## Important Current Limitations
+## Verification Commands
 
-1. Bank access tokens are stored globally in backend process memory, not per user or in durable storage.
-2. Restarting the backend loses the active bank connection.
-3. The dashboard only displays Plaid transactions returned in the initial `added` sync response; it does not handle pagination, cursors, modified transactions, or removed transactions.
-4. There is no budget model, budget CRUD workflow, database, account management, balances view, or user-specific persistence.
-5. There are no automated tests. At minimum, run `npm run lint` and `npm run build` from `frontend` after frontend changes.
-6. Local Vite development does not proxy `/api` requests; Docker/Nginx is the currently configured frontend-to-backend path.
-7. The backend Dockerfile uses a development environment and the default container user; review both before production deployment.
+When making frontend changes, validate with:
+```powershell
+cd frontend
+npm run lint
+npm run build
+```
 
-## Recommended Agent Workflow
+When validating the containerized app or environment wiring, use:
+```powershell
+docker compose build
+```
 
-1. Read the relevant existing component, page, or API route before editing and preserve the current React, Clerk, Plaid, and Express conventions.
-2. For protected API calls, obtain a Clerk session token with `getToken()` and send it as `Authorization: Bearer <token>`.
-3. Keep secret values out of source control. Document variable names and safe placeholders only.
-4. Define the data contract and user ownership model before adding persistence or additional budget features.
-5. Run `npm run lint` and `npm run build` from `frontend` after frontend changes. Rebuild Docker when validating the Clerk build argument or Nginx proxy.
+## Working Rules for Agents
 
-## Useful Files to Read First
+1. Read the specific file you are changing before editing; do not assume the existing architecture is complete or fully consistent.
+2. Preserve the current Clerk + Plaid integration conventions.
+3. Keep API routes and frontend fetch paths aligned.
+4. Keep secrets out of source control and out of docs.
+5. Prefer user-scoped metadata and explicit contracts when adding new features.
+6. Do not add database-backed budget state unless the project is intentionally expanded beyond the current prototype.
+7. When touching auth or Plaid flows, check both the frontend component and the backend route together.
 
-- Frontend bootstrap and Clerk setup: `frontend/src/main.jsx`
-- Router and authentication UI: `frontend/src/App.jsx`
-- Dashboard state and chart data flow: `frontend/pages/Dashboard.jsx`
-- Plaid Link flow: `frontend/components/BankConnect.jsx`
-- Backend auth and Plaid routes: `backend/index.js`
-- Container wiring and environment propagation: `docker-compose.yml`
-- Frontend production build and Nginx API proxy: `frontend/Dockerfile`
+## Suggested Files to Read First
+
+- `frontend/src/main.jsx` — Clerk bootstrap
+- `frontend/src/App.jsx` — top-level routing and auth gating
+- `frontend/pages/Dashboard.jsx` — main dashboard logic
+- `frontend/components/BankConnect.jsx` — Plaid Link flow
+- `backend/index.js` — all auth and Plaid routes
+- `docker-compose.yml` — app wiring and environment injection
+
+## Current Project Status
+
+The repo is a working dashboard prototype that demonstrates:
+- Clerk sign-in
+- Plaid bank linking
+- transaction sync
+- account and month filtering
+- chart-based spending summaries
+
+It does not yet include a durable budgeting model, bank persistence outside Clerk metadata, or a mature automated test suite.

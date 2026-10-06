@@ -1,4 +1,4 @@
-require('dotenv').config();
+
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -33,23 +33,6 @@ const plaidClient = new PlaidApi(plaidConfig);
 
 
 // 3. Routes
-app.post('/api/plaid/create_link_token', async (req, res, next) => {
-  try {
-    const { userId } = getAuth(req);
-    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
-
-    const tokenResponse = await plaidClient.linkTokenCreate({
-      user: { client_user_id: userId },
-      client_name: 'Budget App',
-      products: ['transactions'],
-      country_codes: ['US'],
-      language: 'en',
-    });
-    res.json({ link_token: tokenResponse.data.link_token });
-  } catch (error) {
-    next(error); // Pass to global error handler
-  }
-});
 
 app.post('/api/plaid/exchange_public_token', async (req, res, next) => {
   try {
@@ -85,6 +68,34 @@ app.post('/api/plaid/exchange_public_token', async (req, res, next) => {
     res.status(500).json({ error: 'Failed to exchange token' });
   }
 });
+app.post('/api/plaid/debug/clear_all', async (req, res, next) => {
+  try {
+    const { userId } = getAuth(req);
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+    const user = await clerkClient.users.getUser(userId);
+    const accessTokens = user.privateMetadata?.plaidAccessTokens || [];
+
+    // 1. Delete each duplicate connection from Plaid's servers to restore your limits
+    for (const token of accessTokens) {
+      try {
+        await plaidClient.itemRemove({ access_token: token });
+      } catch (err) {
+        console.error('Plaid deletion skipped for token (may already be deleted):', err.message);
+      }
+    }
+
+    // 2. Wipe the tokens from your Clerk database so your dashboard is truly empty
+    await clerkClient.users.updateUserMetadata(userId, {
+      privateMetadata: { plaidAccessTokens: [] }
+    });
+
+    res.json({ success: true, message: 'All banks disconnected and limits restored.' });
+  } catch (error) {
+    next(error);
+  }
+});
+
 
 app.get('/api/plaid/transactions', async (req, res, next) => {
   try {
@@ -100,8 +111,12 @@ app.get('/api/plaid/transactions', async (req, res, next) => {
     }
     
     if (accessTokens.length === 0) {
-      return res.status(400).json({ 
-        error: 'No active bank connections found for this user.' 
+      // Return 200 OK instead of 400, because 0 banks is a normal user state
+      return res.json({ 
+        success: false,
+        transactions: [],
+        accounts: [],
+        message: 'No active bank connections found for this user.' 
       });
     }
 
@@ -158,6 +173,23 @@ app.get('/api/plaid/transactions', async (req, res, next) => {
     res.json({ success: true, transactions: allTransactions, accounts: allAccounts });
   } catch (error) {
     next(error);
+  }
+});
+app.post('/api/plaid/create_link_token', async (req, res, next) => {
+  try {
+    const { userId } = getAuth(req);
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+    const tokenResponse = await plaidClient.linkTokenCreate({
+      user: { client_user_id: userId },
+      client_name: 'Budget App',
+      products: ['transactions'],
+      country_codes: ['US'],
+      language: 'en',
+    });
+    res.json({ link_token: tokenResponse.data.link_token });
+  } catch (error) {
+    next(error); 
   }
 });
 app.post('/api/plaid/create_update_token', 

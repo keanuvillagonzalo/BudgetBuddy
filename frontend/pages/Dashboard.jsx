@@ -12,8 +12,10 @@ export default function Dashboard() {
   const [accounts, setAccounts] = useState([]);
   const [isConnected, setIsConnected] = useState(false);
   const [selectedMonth, setSelectedMonth] = useState('');
-  // Removed the duplicate selectedAccountId declaration
   const [selectedAccountId, setSelectedAccountId] = useState('all');
+  const [isLoading, setIsLoading] = useState(true);
+
+
 
   const fetchTransactions = useCallback(async () => {
     try {
@@ -30,7 +32,10 @@ export default function Dashboard() {
     } catch (err) {
       // Fails silently if user has not linked an account yet
       setIsConnected(false);
+    } finally {
+      setIsLoading(false);
     }
+
   }, [getToken]);
 
   // Automatically check for an existing token when the dashboard mounts
@@ -59,6 +64,15 @@ export default function Dashboard() {
     return accountFilteredTransactions.filter(tx => tx.date.startsWith(selectedMonth));
   }, [accountFilteredTransactions, selectedMonth]);
 
+if (isLoading) {
+    return (
+      <div style={{ padding: '40px', textAlign: 'center' }}>
+        <h2>Syncing your accounts...</h2>
+        <p>Please wait while we securely fetch your latest data.</p>
+      </div>
+    );
+  }
+
 return (
     <div>
       <div className="dashboard-card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' }}>
@@ -86,6 +100,7 @@ return (
           
           {/* Ensure BankConnect is  imported at the top of Dashboard.jsx */}
           <BankConnect onConnect={fetchTransactions} buttonText="Add Another Bank"  />
+          
         </div>
       </div>
       
