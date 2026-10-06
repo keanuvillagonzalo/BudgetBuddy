@@ -1,0 +1,137 @@
+.app-container {
+  padding: 24px;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 32px;
+}
+
+.header-title {
+  font-size: 20px;
+  color: var(--accent-dark);
+}
+
+.dashboard-card {
+  background: var(--accent-dark);
+  color: var(--white);
+  padding: 24px;
+  border-radius: 24px;
+  margin-bottom: 24px;
+  box-shadow: var(--shadow);
+}
+
+.dashboard-card h2 {
+  color: var(--white);
+  font-size: 16px;
+  font-weight: 400;
+  margin-bottom: 4px;
+}
+
+.dashboard-card .greeting {
+  font-size: 32px;
+  font-weight: 600;
+  margin-bottom: 20px;
+}
+
+.plaid-section {
+  background: var(--white);
+  padding: 24px;
+  border-radius: 24px;
+  text-align: center;
+  box-shadow: var(--shadow);
+}
+
+.plaid-section p {
+  margin-bottom: 20px;
+  color: var(--text-dark);
+  font-size: 14px;
+}
+
+.primary-btn {
+  background: var(--accent-dark);
+  color: var(--white);
+  border: none;
+  padding: 16px 24px;
+  border-radius: 100px; /* Fully rounded buttons */
+  font-size: 16px;
+  font-weight: 500;
+  cursor: pointer;
+  width: 100%;
+  transition: background 0.2s ease;
+  font-family: var(--sans);
+}
+
+.primary-btn:hover:not(:disabled) {
+  background: var(--accent);
+}
+
+.primary-btn:disabled {
+  background: var(--border);
+  cursor: not-allowed;
+}
+.transaction-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.transaction-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px;
+  background: var(--white);
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+}
+
+.transaction-left {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.transaction-name {
+  font-weight: 500;
+  color: var(--accent-dark);
+}
+
+.transaction-details {
+  font-size: 12px;
+  color: var(--text-dark);
+  opacity: 0.8;
+}
+
+.transaction-amount {
+  font-weight: 600;
+  font-size: 16px;
+}
+
+.amount-expense {
+  color: var(--text-dark);
+}
+
+.amount-income {
+  color: var(--accent);
+}
+/* Responsive Grid for Desktop Dashboard */
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 24px;
+}
+
+/* Once the screen is wider than a phone, split into two columns */
+@media (min-width: 768px) {
+  .dashboard-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+  
+  /* Use this class to make elements (like the bar chart) span across both columns */
+  .col-span-full {
+    grid-column: 1 / -1;
+  }
+}
