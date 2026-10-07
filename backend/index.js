@@ -169,6 +169,26 @@ app.get('/api/plaid/transactions', async (req, res, next) => {
     console.error(`[Bank Sync Error - Index ${index}]:`, errorData || result.reason.message);
   }
 });
+
+// --- NEW: Save to JSON File ---
+    try {
+      const backupData = {
+        last_synced: new Date().toISOString(),
+        total_accounts: allAccounts.length,
+        total_transactions: allTransactions.length,
+        accounts: allAccounts,
+        transactions: allTransactions
+      };
+      
+      // Writes to a file named 'transactions_backup.json' in your backend root directory
+      await fs.writeFile(
+        'transactions_backup.json', 
+        JSON.stringify(backupData, null, 2)
+      );
+    } catch (fileError) {
+      console.error('Failed to save transactions to JSON file:', fileError);
+    }
+    // -----------------------------
       
     res.json({ success: true, transactions: allTransactions, accounts: allAccounts });
   } catch (error) {
